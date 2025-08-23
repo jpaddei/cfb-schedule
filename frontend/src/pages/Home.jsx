@@ -119,7 +119,7 @@ export const Home = () => {
                                                                 {game.spread}
                                                             </div>
                                                             <div>
-                                                                {game.overUnder}
+                                                                {game.overUnder ? `O/U: ${game.overUnder}` : ""}
                                                             </div>
                                                         </div>
                                                         <br />
