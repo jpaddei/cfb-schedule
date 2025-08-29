@@ -5,6 +5,9 @@ import cfbd
 
 conferences = ["Mid-American", "Mountain West", "Pac-12", "SEC", "ACC", "Big 12", "Big Ten", "Conference USA", "FBS Independents", "Sun Belt", "American Athletic"]
 
+year = 2025
+week = 1
+
 try:
     client = MongoClient(MONGO_URI)
     db = client["cfb"]
@@ -85,6 +88,49 @@ def build_betting_map(year, week):
         else:
             betting_map[bet.id] = [bet.lines[0].provider, bet.lines[0].formatted_spread, bet.lines[0].over_under]
     return betting_map
+                
+def build_box_scores(year, week):
+    with cfbd.ApiClient(configuration) as api_client:
+        api_instance = cfbd.GamesApi(api_client)
+        games = api_instance.get_game_player_stats(year=year, week=week, classification='fbs')
+    all_box_scores = {}
+    for stats in games:
+        box_scores = {"home": {}, "away": {}}
+        for team_stats in stats.teams:
+            team_key = "home" if team_stats.home_away == "home" else "away"
+            box_score = {
+                "passing": {},
+                "rushing": {},
+                "receiving": {},
+                "fumbles": {},
+                "defensive": {},
+                "interceptions": {},
+                "kickReturns": {},
+                "puntReturns": {},
+                "kicking": {},
+                "punting": {}
+            }
+            for category in team_stats.categories:
+                schema_key = category.name
+                if not schema_key:
+                    continue
+                for stat_type in category.types:
+                    stat_name = stat_type.name.replace("/", "").replace(" ", "").lower()
+                    for athlete in stat_type.athletes:
+                        athlete_id = getattr(athlete, "id", None)
+                        if athlete_id is None:
+                            continue
+                        athlete_obj = box_score[schema_key].setdefault(athlete_id, {
+                            "id": athlete_id,
+                            "name": getattr(athlete, "name", None)
+                        })
+                        athlete_obj[stat_name] = getattr(athlete, "stat", None)
+            # Convert athlete dicts to lists for each stat category
+            for cat in box_score:
+                box_score[cat] = list(box_score[cat].values())
+            box_scores[team_key] = box_score
+        all_box_scores[stats.id] = box_scores
+    return all_box_scores
 
 def get_weekly_games(year, week):
     record_map = build_team_records_map(year)
@@ -92,6 +138,8 @@ def get_weekly_games(year, week):
     media_types, media_channels = build_media_map(year, week)
     venue_map = build_venues_map()
     betting_map = build_betting_map(year, week)
+    # Fetch all box scores for this week
+    all_box_scores = build_box_scores(year, week)
 
     with cfbd.ApiClient(configuration) as api_client:
         api_instance = cfbd.GamesApi(api_client)
@@ -118,7 +166,7 @@ def get_weekly_games(year, week):
         away_rank = rankings_map.get(g.away_team, None)
         venue_location = venue_map.get(g.venue, [None, None])
         betting_info = betting_map.get(g.id, [None, None, None])
-        # handle missing attributes in g
+        # Handle missing attributes in g
         home_data = {
             "name": getattr(g, 'home_team', None),
             "conference": getattr(g, 'home_conference', None),
@@ -142,6 +190,8 @@ def get_weekly_games(year, week):
             "city": venue_location[0],
             "state": venue_location[1]
         }
+        # Get the correct box scores for this game
+        box_scores = all_box_scores.get(getattr(g, 'id', None), {"home": {}, "away": {}})
         # Handle missing points, venue, etc.
         game_doc = {
             "date": getattr(g, 'start_date', None),
@@ -154,7 +204,9 @@ def get_weekly_games(year, week):
             "awayPoints": getattr(g, 'away_points', None),
             "provider": betting_info[0],
             "spread": betting_info[1],
-            "overUnder": betting_info[2]
+            "overUnder": betting_info[2],
+            "homeBoxScore": box_scores.get("home", {}),
+            "awayBoxScore": box_scores.get("away", {})
         }
         # Use upsert to insert if not present
         games_collection.update_one(
@@ -165,18 +217,40 @@ def get_weekly_games(year, week):
 
     print(f"Successfully stored {len(games)} games")
 
+def update_box_scores(year, week):
+    all_box_scores = build_box_scores(year, week)
+    betting_map = build_betting_map(year, week)
+
+    with cfbd.ApiClient(configuration) as api_client:
+        api_instance = cfbd.GamesApi(api_client)
+    
+    games = api_instance.get_games(year=year,week=week,classification='fbs')
+
+    for g in games:
+        box_scores = all_box_scores.get(getattr(g, 'id', None), {"home": {}, "away": {}})
+        betting_info = betting_map.get(g.id, [None, None, None])
+
+        game_doc = {
+            "homePoints": getattr(g, 'home_points', None),
+            "awayPoints": getattr(g, 'away_points', None),
+            "provider": betting_info[0],
+            "spread": betting_info[1],
+            "overUnder": betting_info[2],
+            "homeBoxScore": box_scores.get("home", {}),
+            "awayBoxScore": box_scores.get("away", {})
+        }
+
+        games_collection.update_one(
+            {"date": getattr(g, 'start_date', None), "homeTeam.name": getattr(g, 'home_team', None), "awayTeam.name": getattr(g, 'away_team', None)},
+            {"$set": game_doc},
+            upsert=False
+        )
+
+    print(f"Successfully updated {len(games)} games' box scores")
+
 def job():
-    year = 2025
-    week = 1
     get_weekly_games(year, week)
 
 
 if __name__ == "__main__":
-    # Run immediately for testing
     job()
-
-    # Uncomment to run daily at 3 AM UTC
-    # schedule.every().day.at("03:00").do(job)
-    # while True:
-    #     schedule.run_pending()
-    #     time.sleep(60)
