@@ -7,6 +7,7 @@ conferences = ["Mid-American", "Mountain West", "Pac-12", "SEC", "ACC", "Big 12"
 
 year = 2025
 week = 1
+season_type = 'postseason'
 
 try:
     client = MongoClient(MONGO_URI)
@@ -25,7 +26,7 @@ configuration = cfbd.Configuration(
 def build_team_records_map(year):
     with cfbd.ApiClient(configuration) as api_client:
         api_instance = cfbd.GamesApi(api_client)
-    records = api_instance.get_records(year=2024) # 2025 records not in yet
+    records = api_instance.get_records(year=year)
     record_map = {}
     for rec in records:
         record_map[rec.team] = [rec.total.wins, rec.total.losses, rec.conference_games.wins, rec.conference_games.losses]
@@ -34,7 +35,7 @@ def build_team_records_map(year):
 def build_team_rankings_map(year, week):
     with cfbd.ApiClient(configuration) as api_client:
         api_instance = cfbd.RankingsApi(api_client)
-    rankings = api_instance.get_rankings(year=year,week=week)
+    rankings = api_instance.get_rankings(year=year, week=16)
     rankings_map = {}
     for poll in rankings[0].polls:
         if poll.poll == "AP Top 25":
@@ -50,7 +51,7 @@ def build_team_rankings_map(year, week):
 def build_media_map(year, week):
     with cfbd.ApiClient(configuration) as api_client:
         api_instance = cfbd.GamesApi(api_client)
-    media = api_instance.get_media(year=year, week=week)
+    media = api_instance.get_media(year=year, week=week, season_type=season_type)
     media_types = {}
     media_channels = {}
     for m in media:
@@ -80,7 +81,7 @@ def build_venues_map():
 def build_betting_map(year, week):
     with cfbd.ApiClient(configuration) as api_client:
         api_instance = cfbd.BettingApi(api_client)
-    bets = api_instance.get_lines(year=year,week=week)
+    bets = api_instance.get_lines(year=year,week=week,season_type=season_type)
     betting_map = {}
     for bet in bets:
         if len(bet.lines) == 0:
@@ -92,7 +93,7 @@ def build_betting_map(year, week):
 def build_box_scores(year, week):
     with cfbd.ApiClient(configuration) as api_client:
         api_instance = cfbd.GamesApi(api_client)
-        games = api_instance.get_game_player_stats(year=year, week=week, classification='fbs')
+        games = api_instance.get_game_player_stats(year=year, week=week, classification='fbs', season_type=season_type)
     all_box_scores = {}
     for stats in games:
         box_scores = {"home": {}, "away": {}}
@@ -144,7 +145,7 @@ def get_weekly_games(year, week):
     with cfbd.ApiClient(configuration) as api_client:
         api_instance = cfbd.GamesApi(api_client)
     
-    games = api_instance.get_games(year=year,week=week,classification='fbs')
+    games = api_instance.get_games(year=year,classification='fbs',season_type=season_type)
 
     if not games:
         print("[WARN] No games found for that week.")
@@ -224,7 +225,7 @@ def update_box_scores(year, week):
     with cfbd.ApiClient(configuration) as api_client:
         api_instance = cfbd.GamesApi(api_client)
     
-    games = api_instance.get_games(year=year,week=week,classification='fbs')
+    games = api_instance.get_games(year=year,week=week,classification='fbs',season_type=season_type)
 
     for g in games:
         box_scores = all_box_scores.get(getattr(g, 'id', None), {"home": {}, "away": {}})
