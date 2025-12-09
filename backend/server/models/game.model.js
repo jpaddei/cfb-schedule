@@ -517,6 +517,10 @@ const gameSchema = new mongoose.Schema(
         awayBoxScore: {
             type: boxScoreSchema,
             required: false
+        },
+        notes: {
+            type: String,
+            required: false
         }
     },
     {

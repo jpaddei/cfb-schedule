@@ -207,7 +207,8 @@ def get_weekly_games(year, week):
             "spread": betting_info[1],
             "overUnder": betting_info[2],
             "homeBoxScore": box_scores.get("home", {}),
-            "awayBoxScore": box_scores.get("away", {})
+            "awayBoxScore": box_scores.get("away", {}),
+            "notes": g.notes
         }
         # Use upsert to insert if not present
         games_collection.update_one(

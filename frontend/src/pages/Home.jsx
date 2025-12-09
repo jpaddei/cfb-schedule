@@ -360,6 +360,10 @@ export const Home = () => {
                                                                 {game.venue.city}{game.venue.state ? `, ${game.venue.state}` : ""}
                                                             </div>
                                                             <br />
+                                                            <div>
+                                                                {game.notes}
+                                                            </div>
+                                                            <br />
                                                         </div>
                                                     </div>
                                                 </div>
@@ -401,6 +405,9 @@ export const Home = () => {
                                                 <div>
                                                     {game.overUnder ? `O/U: ${game.overUnder}` : ""}
                                                 </div>
+                                            </div>
+                                            <div className="text-left">
+                                                {game.notes}
                                             </div>
                                         </button>
                                     </div>                              
